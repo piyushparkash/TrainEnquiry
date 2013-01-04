@@ -1,0 +1,178 @@
+#!/usr/bin/perl
+
+# Firstly Lets install the Dependencies JSON Parser and HTTP Request Manager
+system("perl -MCPAN -e 'install JSON; install JSON::XS; install WWW::Mechanize'; clear;");
+ 
+use strict;
+use WWW::Mechanize;
+use JSON -support_by_pp;
+
+#Decide Arguments
+# -s => Search Stations
+# -t => Search Trains
+my $args;
+
+#initialize the common browser to be used by all the functions
+my ($browser)=WWW::Mechanize->new();
+
+# Set the User agent So that we don't get caught
+$browser->agent_alias('Linux Mozilla');
+
+# Make a sample request to fetch the session cookies
+# else the site will not let us fetch data
+$browser->head("http://www.trainenquiry.com");
+
+if ($#ARGV == 0 or $#ARGV == -1)
+{
+	print "Usage: Train -s station_partial_name -t train_info\n\n station_partial: For eg: LUD for Ludhiana\n train_info: Shaheed for Shaheed Express, 12204 for Garib Rath\n";
+	exit;
+}
+
+# Run Functions according to the parameters passed
+while ($args = shift @ARGV)
+{
+	&findtrain(shift @ARGV) if ($args eq "-t");
+	&findstation(shift @ARGV) if ($args eq "-s");
+	#&train_schedule(shift @ARGV) if ($args eq "-sh"); #still working on it
+}
+
+
+#
+#Function findstation
+#param string partial string of the station name
+#return object The parsed JSON Object so that it can be used by other functions
+#Prints Name, Station Code of the station matching to its partial string and State where the station belongs 
+#
+sub findstation
+{
+	if ($_[0] eq "")
+	{
+		return;
+	}
+	
+	my $json = new JSON;
+	
+	#Make the HTTP Request
+	my $response = $browser->post('http://www.trainenquiry.com/RailYatri.ashx',
+	[
+		'q' => $_[0],
+		'RequestType' => 'StationSearch'
+	]
+	);
+		
+	my $json_text;
+	if ($response->is_success) # If request successful
+	{
+		my $content = $response->content();
+		#print $content;
+		
+		#some nice json option to relax the restriction
+		$json_text = $json->allow_nonref->utf8->relaxed->escape_slash->loose->allow_singlequote->allow_barekey->decode($content);
+		my $result;
+		if ($_[1]!=1)
+		{
+			foreach $result (@{$json_text})
+			{
+				#print the result
+				print "Name: ",$result->{name},"\n",
+					"Code: ",$result->{code},"\n",
+					"State: ",$result->{state_name},
+					"\n\n";
+			
+			}
+		}
+	}
+	
+	return $json_text;
+	
+}
+
+#
+#Function findtrain
+#param string train number, train name, source, destination or a combination of these
+#return object The parsed JSON Object so that it can be used by other functions
+#Prints Name, Number of the train matching to its partial string and the days on which it runs
+#
+sub findtrain
+{
+	if ($_[0] eq "")
+	{
+		return;
+	}
+	
+	my $json = new JSON;
+	
+	my $response = $browser->post('http://www.trainenquiry.com/RailYatri.ashx',
+	[
+		'q' => $_[0],
+		'RequestType' => 'Search'
+	]
+	);	
+	my $json_text;
+	if ($response->is_success) # If request successful
+	{
+		my $content = $response->content();
+		#print $content;
+		
+		#some nice json option to relax the restriction
+		$json_text = $json->allow_nonref->utf8->relaxed->escape_slash->loose->allow_singlequote->allow_barekey->decode($content);
+		#TODO: Catch Error Here
+		
+		my $result;
+		if ($_[1]!=1)
+		{
+			foreach $result (@{$json_text})
+			{
+				#print the result
+				print "Name: ",$result->{name},"\n",
+					"Number: ",$result->{number},"\n",
+					"Run Days: ","@{${$result->{routes}}[0]->{run_days}}",
+					"\n\n";
+			
+		}
+		}
+	}
+	return $json_text;
+}
+
+#Under Construction.. :)
+sub tracktrain
+{
+	my $json_text=&findtrain($_[0],1);
+	
+}
+
+
+sub train_schedule
+{
+	my $response = $browser->post('http://www.trainenquiry.com/RailYatri.ashx',
+	[
+		'train_number_variable' => $_[0],
+		'RequestType' => 'Schedule'
+	]
+	);	
+	my $json_text;
+	my $json = new JSON;
+	if ($response->is_success) # If request successful
+	{
+		my $content = $response->content();
+		#print $content;
+		
+		#some nice json option to relax the restriction
+		$json_text = $json->allow_nonref->utf8->relaxed->escape_slash->loose->allow_singlequote->allow_barekey->decode($content);
+		my $result;
+		if ($_[1]!=1)
+		{
+			foreach $result (@{$json_text})
+			{
+				#print the result
+				print "Name: ",$result->{name},"\n",
+					"Number: ",$result->{number},"\n",
+					"Run Days: ","@{${$result->{routes}}[0]->{run_days}}",
+					"\n\n";
+			
+		}
+		}
+	
+}
+}
